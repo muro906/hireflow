@@ -1,0 +1,43 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+backend/bin/
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Docker volumes (local)
+.volumes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# sqlc generated (committed but flagged)
+# backend/internal/models/*.go  <- keep these committed
+
+# Logs
+*.log
+logs/
