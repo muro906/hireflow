@@ -1,23 +1,73 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import client from './client';
-import { Job, PaginatedResponse } from '../types';
+import type { Job, FormSchema } from '../types';
 
-export const useJobs = (page = 1, limit = 10) => {
+interface CreateJobPayload {
+  title: string;
+  description: string;
+  location: string;
+  employment_type: string;
+  status: string;
+  form_schema: FormSchema;
+}
+
+interface UpdateJobPayload extends Partial<CreateJobPayload> {}
+
+export const jobsApi = {
+  list: (status?: string) =>
+    client.get<Job[]>('/jobs', { params: status ? { status } : {} }).then((r) => r.data),
+
+  get: (id: string) =>
+    client.get<Job>(`/jobs/${id}`).then((r) => r.data),
+
+  create: (payload: CreateJobPayload) =>
+    client.post<Job>('/jobs', payload).then((r) => r.data),
+
+  update: (id: string, payload: UpdateJobPayload) =>
+    client.patch<Job>(`/jobs/${id}`, payload).then((r) => r.data),
+
+  delete: (id: string) =>
+    client.delete(`/jobs/${id}`),
+};
+
+export function useJobs(status?: string) {
   return useQuery({
-    queryKey: ['jobs', { page, limit }],
-    queryFn: async () => {
-      // Stubbing the real API call
-      // const { data } = await client.get<PaginatedResponse<Job>>('/jobs', { params: { page, limit } });
-      // return data;
-      return {
-        data: [
-          { id: '1', company_id: 'c1', title: 'Senior Frontend Engineer', description: 'React and TS', location: 'Remote', employment_type: 'Full-time', status: 'open', form_schema: { fields: [] }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-          { id: '2', company_id: 'c1', title: 'Product Manager', description: 'Lead the product', location: 'New York', employment_type: 'Full-time', status: 'draft', form_schema: { fields: [] }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        ] as Job[],
-        total: 2,
-        page,
-        limit,
-      };
+    queryKey: ['jobs', status],
+    queryFn: () => jobsApi.list(status),
+  });
+}
+
+export function useJob(id: string) {
+  return useQuery({
+    queryKey: ['job', id],
+    queryFn: () => jobsApi.get(id),
+    enabled: !!id,
+  });
+}
+
+export function useCreateJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateJobPayload) => jobsApi.create(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}
+
+export function useUpdateJob(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateJobPayload) => jobsApi.update(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['job', id] });
     },
   });
-};
+}
+
+export function useDeleteJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => jobsApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}

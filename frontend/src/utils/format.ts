@@ -5,6 +5,14 @@ export function formatDate(dateString: string | undefined): string {
   return format(new Date(dateString), 'MMM d, yyyy');
 }
 
+export function formatDateTime(dateString: string | undefined): string {
+  if (!dateString) return '';
+  return format(new Date(dateString), 'MMM d, yyyy HH:mm');
+}
+
+/** Alias used throughout applicant components */
+export const formatRelative = formatRelativeDate;
+
 export function formatRelativeDate(dateString: string | undefined): string {
   if (!dateString) return '';
   return formatDistanceToNow(new Date(dateString), { addSuffix: true });
