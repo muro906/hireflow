@@ -1,8 +1,7 @@
-import { useForm } from 'react-form-hooks'; // Wait, let's use the real react-hook-form
 import { useForm as useHookForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { FormSchema, FormField } from '../../types';
+import { FormSchema } from '../../types';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
 import { Select } from '../ui/Select';
@@ -10,7 +9,7 @@ import { Button } from '../ui/Button';
 
 interface DynamicFormProps {
   schema: FormSchema;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: Record<string, unknown>) => void;
   isLoading?: boolean;
 }
 

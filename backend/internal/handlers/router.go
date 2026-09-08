@@ -29,7 +29,7 @@ func SetupRouter(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, store 
 	authHandler := NewAuthHandler(authSvc)
 	companyHandler := NewCompanyHandler(compSvc)
 	jobHandler := NewJobHandler(jobSvc, pSvc)
-	appHandler := NewApplicationHandler(appSvc)
+	appHandler := NewApplicationHandler(appSvc, fileSvc)
 	fileHandler := NewFileHandler(fileSvc)
 	reportHandler := NewReportHandler(reportSvc)
 
@@ -63,8 +63,10 @@ func SetupRouter(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, store 
 			protected.GET("/applications/:id", appHandler.Get)
 			protected.DELETE("/applications/:id", appHandler.Delete)
 			protected.PATCH("/applications/:id/stage", appHandler.MoveStage)
+			protected.GET("/applications/:id/history", appHandler.ListStageHistory)
 
 			// File management
+			protected.GET("/applications/:id/files", fileHandler.List)
 			protected.POST("/applications/:id/files", fileHandler.Upload)
 			protected.GET("/applications/:id/files/:fid", fileHandler.GetURL)
 			protected.DELETE("/applications/:id/files/:fid", fileHandler.Delete)
@@ -81,7 +83,8 @@ func SetupRouter(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, store 
 
 		// Public routes (no auth required)
 		v1.GET("/jobs/:id/form-schema", jobHandler.GetFormSchema)
-		v1.POST("/jobs/:id/apply", appHandler.Apply)
+		// Rate-limited: this is an unauthenticated endpoint that accepts file uploads.
+		v1.POST("/jobs/:id/apply", middleware.RateLimit("20-M"), appHandler.Apply)
 	}
 
 	return r

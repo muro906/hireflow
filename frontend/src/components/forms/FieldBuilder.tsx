@@ -3,8 +3,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { FormField, FieldType } from '../../types';
-import { GripVertical, Trash2, Settings2, Plus } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { GripVertical, Trash2, Plus } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 
@@ -40,10 +39,27 @@ function SortableFieldItem({ field, onUpdate, onRemove }: { field: FormField; on
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-brand-500/10 text-brand-500 text-xs px-2 py-1 rounded-md font-medium border border-brand-500/20">
-              {FIELD_TYPES.find(t => t.type === field.type)?.label || field.type}
-            </span>
-            <button onClick={() => onRemove(field.id)} className="text-slate-500 hover:text-rose-500 p-1">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">Type</label>
+              <Select
+                value={field.type}
+                options={FIELD_TYPES.map(t => ({ value: t.type, label: t.label }))}
+                onChange={(e) => {
+                  const type = e.target.value as FieldType;
+                  onUpdate(field.id, {
+                    type,
+                    options: type === 'select' ? field.options ?? ['Option 1'] : undefined,
+                  });
+                }}
+                className="h-9 w-40"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onRemove(field.id)}
+              aria-label="Remove field"
+              className="text-slate-500 hover:text-rose-500 p-1 mt-5"
+            >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
@@ -133,6 +149,7 @@ export function FieldBuilder({ initialFields = [], onChange }: { initialFields?:
           {FIELD_TYPES.map((ft) => (
             <button
               key={ft.type}
+              type="button"
               onClick={() => addField(ft.type)}
               className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-800 bg-slate-900 hover:border-brand-500/50 hover:bg-brand-500/10 transition-colors text-left text-sm text-slate-300"
             >
@@ -147,7 +164,7 @@ export function FieldBuilder({ initialFields = [], onChange }: { initialFields?:
       <div className="flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-6 overflow-y-auto">
         <div className="mb-6 pb-4 border-b border-slate-800">
           <h3 className="font-semibold text-slate-200">Form Fields</h3>
-          <p className="text-sm text-slate-400">Drag to reorder. Standard fields (Name, Email, Resume) are included automatically.</p>
+          <p className="text-sm text-slate-400">Drag to reorder. Name, email, phone and CV are collected automatically.</p>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

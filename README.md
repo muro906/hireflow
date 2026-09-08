@@ -149,17 +149,19 @@ All routes are prefixed `/api/v1`. Protected routes require `Authorization: Bear
 | `DELETE` | `/jobs/:id` | Archive job |
 | `GET` | `/jobs/:id/pipeline` | Kanban data (stages + bucketed applications) |
 | `GET` | `/jobs/:id/form-schema` | **Public** — candidate form definition |
-| `POST` | `/jobs/:id/apply` | **Public** — submit candidate application |
+| `POST` | `/jobs/:id/apply` | **Public** — submit candidate application (JSON, or `multipart/form-data` with a `cv` file part) |
 
 ### Applications
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/applications` | List applications (with filters) |
+| `GET` | `/applications` | List applications (filters + pagination); returns `{data, total, page, limit}` |
 | `GET` | `/applications/:id` | Full applicant profile |
 | `PATCH` | `/applications/:id/stage` | Move stage (triggers email) |
 | `DELETE` | `/applications/:id` | Delete application |
+| `GET` | `/applications/:id/files` | List an applicant's files |
 | `POST` | `/applications/:id/files` | Upload CV / attachment |
 | `GET` | `/applications/:id/files/:fid` | Presigned URL redirect |
+| `GET` | `/applications/:id/history` | Stage transition timeline |
 | `POST` | `/applications/:id/notes` | Add recruiter note |
 | `GET` | `/applications/:id/notes` | List notes |
 

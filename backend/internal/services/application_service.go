@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/hireflow/hireflow/backend/internal/models"
 	"github.com/hireflow/hireflow/backend/internal/worker"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ApplicationService struct {
@@ -51,53 +52,61 @@ func (s *ApplicationService) Apply(ctx context.Context, jobID uuid.UUID, name, e
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-func (s *ApplicationService) List(ctx context.Context, companyID uuid.UUID, jobID, stageID string, search string, page, limit int) ([]models.Application, error) {
+// List returns one page of applications along with the total number of rows
+// matching the filters, so callers can paginate without guessing from page size.
+func (s *ApplicationService) List(ctx context.Context, companyID uuid.UUID, jobID, stageID string, search string, page, limit int) ([]models.Application, int, error) {
 	offset := (page - 1) * limit
+
+	where := " WHERE j.company_id = $1"
+	args := []interface{}{companyID}
+	argID := 2
+
+	if jobID != "" {
+		where += fmt.Sprintf(" AND a.job_id = $%d", argID)
+		args = append(args, jobID)
+		argID++
+	}
+	if stageID != "" {
+		where += fmt.Sprintf(" AND a.stage_id = $%d", argID)
+		args = append(args, stageID)
+		argID++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND (a.candidate_name ILIKE $%d OR a.candidate_email ILIKE $%d)", argID, argID)
+		args = append(args, "%"+search+"%")
+		argID++
+	}
+
+	var total int
+	countQ := "SELECT COUNT(*) FROM applications a JOIN jobs j ON a.job_id = j.id" + where
+	if err := s.db.QueryRow(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count applications: %w", err)
+	}
 
 	q := `
 		SELECT a.id, a.job_id, a.stage_id, a.candidate_name, a.candidate_email, a.candidate_phone, a.form_data, a.applied_at, a.hired_at, a.rejected_at
 		FROM applications a
 		JOIN jobs j ON a.job_id = j.id
-		WHERE j.company_id = $1
-	`
-	args := []interface{}{companyID}
-	argID := 2
-
-	if jobID != "" {
-		q += fmt.Sprintf(" AND a.job_id = $%d", argID)
-		args = append(args, jobID)
-		argID++
-	}
-	if stageID != "" {
-		q += fmt.Sprintf(" AND a.stage_id = $%d", argID)
-		args = append(args, stageID)
-		argID++
-	}
-	if search != "" {
-		q += fmt.Sprintf(" AND (a.candidate_name ILIKE $%d OR a.candidate_email ILIKE $%d)", argID, argID)
-		args = append(args, "%"+search+"%")
-		argID++
-	}
-
+	` + where
 	q += fmt.Sprintf(" ORDER BY a.applied_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
 	args = append(args, limit, offset)
 
 	rows, err := s.db.Query(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query applications: %w", err)
+		return nil, 0, fmt.Errorf("query applications: %w", err)
 	}
 	defer rows.Close()
 
-	var apps []models.Application
+	apps := []models.Application{}
 	for rows.Next() {
 		var app models.Application
 		if err := rows.Scan(&app.ID, &app.JobID, &app.StageID, &app.CandidateName, &app.CandidateEmail, &app.CandidatePhone, &app.FormData, &app.AppliedAt, &app.HiredAt, &app.RejectedAt); err != nil {
-			return nil, fmt.Errorf("scan application: %w", err)
+			return nil, 0, fmt.Errorf("scan application: %w", err)
 		}
 		apps = append(apps, app)
 	}
 
-	return apps, nil
+	return apps, total, nil
 }
 
 // ─── Get ──────────────────────────────────────────────────────────────────────
@@ -266,4 +275,44 @@ func (s *ApplicationService) DeleteNote(ctx context.Context, companyID, userID, 
 		return fmt.Errorf("note not found or unauthorized")
 	}
 	return nil
+}
+
+// ─── Stage history ────────────────────────────────────────────────────────────
+
+// StageHistoryEntry is one stage transition with the stage and user names
+// resolved, which is what the applicant timeline renders.
+type StageHistoryEntry struct {
+	ID            uuid.UUID `json:"id"`
+	FromStageName *string   `json:"from_stage_name"`
+	ToStageName   string    `json:"to_stage_name"`
+	MovedByName   string    `json:"moved_by_name"`
+	MovedAt       time.Time `json:"moved_at"`
+}
+
+func (s *ApplicationService) ListStageHistory(ctx context.Context, companyID, appID uuid.UUID) ([]StageHistoryEntry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT h.id, from_stage.name, to_stage.name, u.full_name, h.moved_at
+		FROM stage_history h
+		JOIN applications a ON h.application_id = a.id
+		JOIN jobs j ON a.job_id = j.id
+		JOIN pipeline_stages to_stage ON h.to_stage_id = to_stage.id
+		LEFT JOIN pipeline_stages from_stage ON h.from_stage_id = from_stage.id
+		JOIN users u ON h.moved_by = u.id
+		WHERE h.application_id = $1 AND j.company_id = $2
+		ORDER BY h.moved_at DESC
+	`, appID, companyID)
+	if err != nil {
+		return nil, fmt.Errorf("query stage history: %w", err)
+	}
+	defer rows.Close()
+
+	entries := []StageHistoryEntry{}
+	for rows.Next() {
+		var e StageHistoryEntry
+		if err := rows.Scan(&e.ID, &e.FromStageName, &e.ToStageName, &e.MovedByName, &e.MovedAt); err != nil {
+			return nil, fmt.Errorf("scan stage history: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
 }

@@ -1,9 +1,7 @@
 import { PipelineStage, Application } from '../../types';
 import { CandidateCard } from './CandidateCard';
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { Plus } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 
 interface KanbanColumnProps {
   stage: PipelineStage;
@@ -11,12 +9,12 @@ interface KanbanColumnProps {
 }
 
 export function KanbanColumn({ stage, applications }: KanbanColumnProps) {
-  const { setNodeRef } = useSortable({
+  const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
     data: {
       type: 'Column',
       stage,
-    }
+    },
   });
 
   return (
@@ -31,24 +29,21 @@ export function KanbanColumn({ stage, applications }: KanbanColumnProps) {
         </div>
       </div>
 
-      <div ref={setNodeRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div
+        ref={setNodeRef}
+        className={`flex-1 overflow-y-auto p-3 space-y-3 transition-colors ${isOver ? 'bg-brand-500/5' : ''}`}
+      >
         <SortableContext items={applications.map(a => a.id)} strategy={verticalListSortingStrategy}>
           {applications.map(app => (
             <CandidateCard key={app.id} application={app} />
           ))}
         </SortableContext>
-        
+
         {applications.length === 0 && (
           <div className="text-center p-4 border border-dashed border-slate-700/50 rounded-lg text-slate-500 text-sm">
             Drag candidates here
           </div>
         )}
-      </div>
-
-      <div className="p-3 border-t border-slate-800">
-        <Button variant="ghost" fullWidth className="text-slate-400 hover:text-slate-200">
-          <Plus className="w-4 h-4 mr-2" /> Add Candidate
-        </Button>
       </div>
     </div>
   );

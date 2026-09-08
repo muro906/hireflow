@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
@@ -28,8 +30,36 @@ func NewAuthService(db *pgxpool.Pool, rdb *redis.Client, cfg *config.Config) *Au
 	return &AuthService{db: db, rdb: rdb, cfg: cfg}
 }
 
+var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slugify reduces a company name to a URL-safe slug. Punctuation and repeated
+// separators collapse to single hyphens, so "Acme, Inc." becomes "acme-inc".
 func slugify(s string) string {
-	return strings.ToLower(strings.ReplaceAll(s, " ", "-"))
+	slug := strings.Trim(slugUnsafe.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	if slug == "" {
+		// A name made entirely of characters we strip still needs a slug.
+		slug = "company"
+	}
+	return slug
+}
+
+// uniqueSlug returns base, or the first free base-2, base-3, … variant. Company
+// names are not unique across tenants, so two companies called "Acme" must both
+// be able to register; only the slug has to differ.
+func uniqueSlug(ctx context.Context, tx pgx.Tx, base string) (string, error) {
+	candidate := base
+	for i := 2; i <= 1000; i++ {
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM companies WHERE slug = $1)", candidate).Scan(&exists); err != nil {
+			return "", fmt.Errorf("check slug: %w", err)
+		}
+		if !exists {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
+	// Pathological case: fall back to a random suffix rather than looping forever.
+	return fmt.Sprintf("%s-%s", base, uuid.NewString()[:8]), nil
 }
 
 func (s *AuthService) Register(ctx context.Context, companyName, email, password, fullName string) (*models.User, string, string, error) {
@@ -39,7 +69,11 @@ func (s *AuthService) Register(ctx context.Context, companyName, email, password
 	}
 	defer tx.Rollback(ctx)
 
-	slug := slugify(companyName)
+	slug, err := uniqueSlug(ctx, tx, slugify(companyName))
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	var companyID uuid.UUID
 	err = tx.QueryRow(ctx, "INSERT INTO companies (name, slug) VALUES ($1, $2) RETURNING id", companyName, slug).Scan(&companyID)
 	if err != nil {
