@@ -7,7 +7,7 @@ export const reportsApi = {
     client.get<TimeToHireData[]>('/reports/time-to-hire').then((r) => r.data),
 
   conversion: () =>
-    client.get<ConversionData>('/reports/conversion').then((r) => r.data),
+    client.get<ConversionData[]>('/reports/conversion').then((r) => r.data),
 };
 
 export function useTimeToHire() {

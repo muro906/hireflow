@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/hireflow/hireflow/backend/internal/models"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PipelineService struct {
@@ -18,7 +18,7 @@ func NewPipelineService(db *pgxpool.Pool) *PipelineService {
 }
 
 type PipelineResponse struct {
-	Stages       []models.PipelineStage            `json:"stages"`
+	Stages       []models.PipelineStage             `json:"stages"`
 	Applications map[uuid.UUID][]models.Application `json:"applications"`
 }
 
@@ -49,22 +49,22 @@ func (s *PipelineService) GetPipeline(ctx context.Context, companyID, jobID uuid
 		Stages:       []models.PipelineStage{},
 		Applications: make(map[uuid.UUID][]models.Application),
 	}
-	
+
 	stagesMap := make(map[uuid.UUID]bool)
-	
+
 	for rows.Next() {
 		var stg models.PipelineStage
 		// All application columns are nullable due to LEFT JOIN
 		var (
-			appID    *uuid.UUID
-			appJobID *uuid.UUID
-			appStageID *uuid.UUID
-			appName  *string
-			appEmail *string
-			appPhone *string
-			appFormData []byte
-			appAppliedAt *interface{}
-			appHiredAt   *interface{}
+			appID         *uuid.UUID
+			appJobID      *uuid.UUID
+			appStageID    *uuid.UUID
+			appName       *string
+			appEmail      *string
+			appPhone      *string
+			appFormData   []byte
+			appAppliedAt  *interface{}
+			appHiredAt    *interface{}
 			appRejectedAt *interface{}
 		)
 
@@ -100,7 +100,6 @@ func (s *PipelineService) GetPipeline(ctx context.Context, companyID, jobID uuid
 			res.Applications[stg.ID] = append(res.Applications[stg.ID], app)
 		}
 	}
-
 
 	return res, nil
 }

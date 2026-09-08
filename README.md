@@ -149,17 +149,19 @@ All routes are prefixed `/api/v1`. Protected routes require `Authorization: Bear
 | `DELETE` | `/jobs/:id` | Archive job |
 | `GET` | `/jobs/:id/pipeline` | Kanban data (stages + bucketed applications) |
 | `GET` | `/jobs/:id/form-schema` | **Public** — candidate form definition |
-| `POST` | `/jobs/:id/apply` | **Public** — submit candidate application |
+| `POST` | `/jobs/:id/apply` | **Public** — submit candidate application (JSON, or `multipart/form-data` with a `cv` file part) |
 
 ### Applications
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/applications` | List applications (with filters) |
+| `GET` | `/applications` | List applications (filters + pagination); returns `{data, total, page, limit}` |
 | `GET` | `/applications/:id` | Full applicant profile |
 | `PATCH` | `/applications/:id/stage` | Move stage (triggers email) |
 | `DELETE` | `/applications/:id` | Delete application |
+| `GET` | `/applications/:id/files` | List an applicant's files |
 | `POST` | `/applications/:id/files` | Upload CV / attachment |
 | `GET` | `/applications/:id/files/:fid` | Presigned URL redirect |
+| `GET` | `/applications/:id/history` | Stage transition timeline |
 | `POST` | `/applications/:id/notes` | Add recruiter note |
 | `GET` | `/applications/:id/notes` | List notes |
 
@@ -191,8 +193,14 @@ Key variables:
 ## 🧪 Development
 
 ```bash
-# Run backend tests
+# Run backend tests (unit + integration)
 make test
+
+# Unit tests only — no database required
+make test-short
+
+# Run frontend tests (vitest)
+make test-fe
 
 # Run frontend type-check + lint
 make typecheck lint-fe
@@ -206,6 +214,25 @@ make psql
 # Tail logs
 make logs
 ```
+
+### Tests
+
+Backend tests are split by whether they need infrastructure:
+
+- **Unit tests** run anywhere (`make test-short`).
+- **Integration tests** need a migrated PostgreSQL database and read
+  `TEST_DATABASE_URL`, falling back to `DATABASE_URL`. They **skip** rather than
+  fail when neither is set, so `make test-short` stays green on a bare checkout.
+  Each test builds its own company fixture and deletes it afterwards.
+
+```bash
+# Integration tests against the docker-compose database
+make dev-bg && make migrate
+TEST_DATABASE_URL="postgres://hireflow:hireflow_secret@localhost:5433/hireflow?sslmode=disable" make test
+```
+
+Frontend tests use **vitest** + **Testing Library** in a jsdom environment
+(`npm run test`, or `npm run test:watch` while developing).
 
 ### Creating a migration
 

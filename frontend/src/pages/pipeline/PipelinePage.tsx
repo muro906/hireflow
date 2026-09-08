@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { usePipeline } from '../../api/applications';
+import { usePipeline } from '../../api/pipeline';
 import { KanbanBoard } from '../../components/kanban/KanbanBoard';
 
 export default function PipelinePage() {

@@ -17,6 +17,22 @@ func NewFileHandler(svc *services.FileService) *FileHandler {
 	return &FileHandler{svc: svc}
 }
 
+func (h *FileHandler) List(c *gin.Context) {
+	cID, _ := middleware.GetCompanyID(c)
+	aID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid app id"})
+		return
+	}
+
+	files, err := h.svc.ListByApplication(c.Request.Context(), cID, aID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, files)
+}
+
 func (h *FileHandler) Upload(c *gin.Context) {
 	cID, _ := middleware.GetCompanyID(c)
 	aID, err := uuid.Parse(c.Param("id"))

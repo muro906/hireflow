@@ -76,7 +76,8 @@ export interface ApplicationFile {
 export interface Note {
   id: string;
   application_id: string;
-  user_id: string;
+  /** Null once the author's account has been deleted; user_name reads "Deleted user". */
+  user_id: string | null;
   user_name: string;
   body: string;
   created_at: string;
@@ -102,13 +103,12 @@ export interface TimeToHireData {
   avg_days: number;
 }
 
+/** One pipeline stage's throughput. `conversion_rate` is already a percentage. */
 export interface ConversionData {
-  stages: Array<{
-    name: string;
-    entered: number;
-    exited: number;
-    conversion_rate: number;
-  }>;
+  stage_name: string;
+  entered: number;
+  exited: number;
+  conversion_rate: number;
 }
 
 export interface AuthTokens {

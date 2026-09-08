@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/hireflow/hireflow/backend/internal/models"
 	"github.com/hireflow/hireflow/backend/internal/storage"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type FileService struct {
@@ -33,6 +33,28 @@ func (s *FileService) Upload(ctx context.Context, companyID, appID uuid.UUID, fi
 		return nil, fmt.Errorf("application not found or access denied")
 	}
 
+	return s.store(ctx, companyID, appID, fileType, filename, contentType, size, reader)
+}
+
+// UploadForApplication stores a file against an application, resolving the owning
+// company from the application itself. The public apply flow uses this: a candidate
+// has no session, so there is no company in the request context to check against.
+// Callers must have just created appID themselves — it is not a caller-supplied id.
+func (s *FileService) UploadForApplication(ctx context.Context, appID uuid.UUID, fileType, filename, contentType string, size int64, reader io.Reader) (*models.ApplicationFile, error) {
+	var companyID uuid.UUID
+	err := s.db.QueryRow(ctx, `
+		SELECT j.company_id FROM applications a
+		JOIN jobs j ON a.job_id = j.id
+		WHERE a.id = $1
+	`, appID).Scan(&companyID)
+	if err != nil {
+		return nil, fmt.Errorf("application not found: %w", err)
+	}
+
+	return s.store(ctx, companyID, appID, fileType, filename, contentType, size, reader)
+}
+
+func (s *FileService) store(ctx context.Context, companyID, appID uuid.UUID, fileType, filename, contentType string, size int64, reader io.Reader) (*models.ApplicationFile, error) {
 	if fileType == "" {
 		fileType = "cv"
 	}
@@ -44,7 +66,7 @@ func (s *FileService) Upload(ctx context.Context, companyID, appID uuid.UUID, fi
 	}
 
 	var file models.ApplicationFile
-	err = s.db.QueryRow(ctx, `
+	err := s.db.QueryRow(ctx, `
 		INSERT INTO application_files (application_id, file_type, s3_key, filename, content_type, size_bytes)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, application_id, file_type, s3_key, filename, content_type, size_bytes, uploaded_at
@@ -114,7 +136,7 @@ func (s *FileService) ListByApplication(ctx context.Context, companyID, appID uu
 	}
 	defer rows.Close()
 
-	var files []models.ApplicationFile
+	files := []models.ApplicationFile{}
 	for rows.Next() {
 		var f models.ApplicationFile
 		if err := rows.Scan(&f.ID, &f.ApplicationID, &f.FileType, &f.S3Key, &f.Filename, &f.ContentType, &f.SizeBytes, &f.UploadedAt); err != nil {

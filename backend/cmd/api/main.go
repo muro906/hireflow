@@ -43,7 +43,7 @@ func main() {
 	defer queue.Close()
 
 	r := handlers.SetupRouter(cfg, pool, rdb, store, queue)
-	
+
 	log.Printf("Server listening on port %s", cfg.Port)
 	if err := r.Run(fmt.Sprintf(":%s", cfg.Port)); err != nil {
 		log.Fatalf("server failed: %v", err)

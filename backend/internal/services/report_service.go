@@ -39,7 +39,7 @@ func (s *ReportService) GetTimeToHire(ctx context.Context, companyID uuid.UUID) 
 	}
 	defer rows.Close()
 
-	var result []TimeToHireRow
+	result := []TimeToHireRow{}
 	for rows.Next() {
 		var r TimeToHireRow
 		if err := rows.Scan(&r.JobID, &r.JobTitle, &r.Month, &r.AvgDays); err != nil {
@@ -81,7 +81,7 @@ func (s *ReportService) GetConversionRates(ctx context.Context, companyID uuid.U
 	}
 	defer rows.Close()
 
-	var result []ConversionRow
+	result := []ConversionRow{}
 	for rows.Next() {
 		var r ConversionRow
 		if err := rows.Scan(&r.StageName, &r.Entered, &r.Exited, &r.ConversionRate); err != nil {

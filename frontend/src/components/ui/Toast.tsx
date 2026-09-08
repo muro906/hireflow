@@ -1,4 +1,3 @@
-import * as React from 'react';
 import { useUiStore } from '../../store/ui';
 import { cn } from '../../utils/cn';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';

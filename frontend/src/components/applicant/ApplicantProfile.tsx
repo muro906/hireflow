@@ -1,9 +1,14 @@
-import { useParams, Link } from 'react-router-dom';
-import { Mail, Phone, Calendar, ArrowLeft, Upload } from 'lucide-react';
-import { useApplication } from '../../api/applications';
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Mail, Phone, Calendar, ArrowLeft, Upload, Trash2 } from 'lucide-react';
+import { useApplication, useDeleteApplication } from '../../api/applications';
 import { useFiles, useUploadFile } from '../../api/files';
+import { usePipeline } from '../../api/pipeline';
 import { Badge } from '../ui/Badge';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 import { Spinner } from '../ui/Spinner';
+import { useUiStore } from '../../store/ui';
 import { Notes } from './Notes';
 import { StageHistory } from './StageHistory';
 import { FileList } from './FileList';
@@ -15,6 +20,11 @@ export function ApplicantProfile() {
   const { data: app, isLoading } = useApplication(id!);
   const { data: files } = useFiles(id!);
   const uploadFile = useUploadFile(id!);
+  const { data: pipeline } = usePipeline(app?.job_id ?? '');
+  const deleteApplication = useDeleteApplication();
+  const addToast = useUiStore((st) => st.addToast);
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (isLoading) {
     return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
@@ -22,6 +32,7 @@ export function ApplicantProfile() {
   if (!app) return <p className="text-slate-400">Application not found.</p>;
 
   const cvFile = files?.find((f) => f.file_type === 'cv');
+  const stage = pipeline?.stages.find((st) => st.id === app.stage_id);
 
   return (
     <div className="space-y-6">
@@ -34,10 +45,51 @@ export function ApplicantProfile() {
           <h2 className="text-xl font-bold text-slate-100">{app.candidate_name}</h2>
           <p className="text-sm text-slate-400">{app.candidate_email}</p>
         </div>
-        <Badge variant="stage" color="#6366f1" className="ml-auto">
-          Stage
-        </Badge>
+        <div className="ml-auto flex items-center gap-3">
+          <Badge dotColor={stage?.color ?? '#6366f1'}>
+            {stage?.name ?? 'Unknown stage'}
+          </Badge>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            aria-label="Delete application"
+            className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete application"
+        size="sm"
+      >
+        <p className="text-sm text-slate-300">
+          Permanently delete <span className="font-medium text-slate-100">{app.candidate_name}</span>'s
+          application, including notes and uploaded files? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-3 mt-6">
+          <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          <Button
+            variant="danger"
+            isLoading={deleteApplication.isPending}
+            onClick={() =>
+              deleteApplication.mutate(id!, {
+                onSuccess: () => {
+                  addToast({ title: 'Application deleted', description: app.candidate_name, variant: 'success' });
+                  navigate('/app/applicants');
+                },
+                onError: () =>
+                  addToast({ title: 'Could not delete application', description: 'Please try again.', variant: 'error' }),
+              })
+            }
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: CV + files */}

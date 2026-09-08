@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -12,11 +15,12 @@ import (
 )
 
 type ApplicationHandler struct {
-	svc *services.ApplicationService
+	svc   *services.ApplicationService
+	files *services.FileService
 }
 
-func NewApplicationHandler(svc *services.ApplicationService) *ApplicationHandler {
-	return &ApplicationHandler{svc: svc}
+func NewApplicationHandler(svc *services.ApplicationService, files *services.FileService) *ApplicationHandler {
+	return &ApplicationHandler{svc: svc, files: files}
 }
 
 // ─── Apply (public) ────────────────────────────────────────────────────────────
@@ -28,6 +32,29 @@ type applyReq struct {
 	FormData json.RawMessage `json:"form_data"`
 }
 
+var errUnsupportedCV = errors.New("CV must be a PDF, DOC or DOCX file")
+
+// cvContentTypes are the document types a candidate may attach as a CV.
+var cvContentTypes = map[string]bool{
+	"application/pdf":    true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+}
+
+var cvExtensions = map[string]bool{".pdf": true, ".doc": true, ".docx": true}
+
+// isAllowedCV reports whether an attachment looks like a CV document. Browsers
+// disagree on the content type for .doc/.docx, so a recognised extension is
+// accepted even when the declared type is not one we know.
+func isAllowedCV(contentType, filename string) bool {
+	if cvContentTypes[contentType] {
+		return true
+	}
+	return cvExtensions[strings.ToLower(filepath.Ext(filename))]
+}
+
+// Apply accepts either a JSON body or, when the candidate attaches a CV, a
+// multipart/form-data body carrying the same fields plus a "cv" file part.
 func (h *ApplicationHandler) Apply(c *gin.Context) {
 	jID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -36,7 +63,24 @@ func (h *ApplicationHandler) Apply(c *gin.Context) {
 	}
 
 	var req applyReq
-	if err := c.ShouldBindJSON(&req); err != nil {
+	multipart := strings.HasPrefix(c.ContentType(), "multipart/form-data")
+
+	if multipart {
+		req.Name = c.PostForm("candidate_name")
+		req.Email = c.PostForm("candidate_email")
+		req.Phone = c.PostForm("candidate_phone")
+		if fd := c.PostForm("form_data"); fd != "" {
+			if !json.Valid([]byte(fd)) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "form_data must be valid JSON"})
+				return
+			}
+			req.FormData = json.RawMessage(fd)
+		}
+		if req.Name == "" || req.Email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "candidate_name and candidate_email are required"})
+			return
+		}
+	} else if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -46,7 +90,37 @@ func (h *ApplicationHandler) Apply(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	if multipart {
+		if err := h.attachCV(c, app.ID); err != nil {
+			// The application is already saved; report the CV failure without
+			// discarding it, so the candidate does not silently lose the submission.
+			c.JSON(http.StatusCreated, gin.H{"application": app, "cv_error": err.Error()})
+			return
+		}
+	}
+
 	c.JSON(http.StatusCreated, app)
+}
+
+// attachCV stores the optional "cv" part of a multipart apply request.
+func (h *ApplicationHandler) attachCV(c *gin.Context, appID uuid.UUID) error {
+	file, header, err := c.Request.FormFile("cv")
+	if err != nil {
+		return nil // no CV attached — the field is optional at the API level
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if !isAllowedCV(contentType, header.Filename) {
+		return errUnsupportedCV
+	}
+
+	_, err = h.files.UploadForApplication(
+		c.Request.Context(), appID, "cv",
+		filepath.Base(header.Filename), contentType, header.Size, file,
+	)
+	return err
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
@@ -67,12 +141,17 @@ func (h *ApplicationHandler) List(c *gin.Context) {
 		limit = 20
 	}
 
-	apps, err := h.svc.List(c.Request.Context(), cID, jobID, stageID, search, page, limit)
+	apps, total, err := h.svc.List(c.Request.Context(), cID, jobID, stageID, search, page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, apps)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  apps,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
 }
 
 // ─── Get ──────────────────────────────────────────────────────────────────────
@@ -197,4 +276,22 @@ func (h *ApplicationHandler) DeleteNote(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// ─── Stage history ────────────────────────────────────────────────────────────
+
+func (h *ApplicationHandler) ListStageHistory(c *gin.Context) {
+	cID, _ := middleware.GetCompanyID(c)
+	aID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid application id"})
+		return
+	}
+
+	entries, err := h.svc.ListStageHistory(c.Request.Context(), cID, aID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, entries)
 }

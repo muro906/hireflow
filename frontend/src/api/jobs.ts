@@ -11,7 +11,7 @@ interface CreateJobPayload {
   form_schema: FormSchema;
 }
 
-interface UpdateJobPayload extends Partial<CreateJobPayload> {}
+type UpdateJobPayload = Partial<CreateJobPayload>;
 
 export const jobsApi = {
   list: (status?: string) =>

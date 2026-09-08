@@ -7,8 +7,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/hireflow/hireflow/backend/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func New(cfg *config.Config) (*pgxpool.Pool, error) {
@@ -34,10 +34,10 @@ func RunMigrations(pool *pgxpool.Pool, migrationsPath string, dbURL string) erro
 	if err != nil {
 		return fmt.Errorf("migration init failed: %w", err)
 	}
-	
+
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("migration up failed: %w", err)
 	}
-	
+
 	return nil
 }

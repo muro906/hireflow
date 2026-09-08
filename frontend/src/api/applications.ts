@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import client from './client';
-import type { Application } from '../types';
+import type { Application, PaginatedResponse } from '../types';
 
 interface ListParams {
   job_id?: string;
@@ -12,7 +12,7 @@ interface ListParams {
 
 export const applicationsApi = {
   list: (params: ListParams) =>
-    client.get<Application[]>('/applications', { params }).then((r) => r.data),
+    client.get<PaginatedResponse<Application>>('/applications', { params }).then((r) => r.data),
 
   get: (id: string) =>
     client.get<Application>(`/applications/${id}`).then((r) => r.data),
@@ -43,6 +43,9 @@ export function useDeleteApplication() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => applicationsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['applications'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applications'] });
+      qc.invalidateQueries({ queryKey: ['pipeline'] });
+    },
   });
 }

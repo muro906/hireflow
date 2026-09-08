@@ -1,83 +1,116 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { useJobs } from '../api/jobs';
-import { Briefcase, Users, Clock, ArrowRight } from 'lucide-react';
-import { Button } from '../components/ui/Button';
 import { Link } from 'react-router-dom';
+import { Briefcase, Users, Clock, ArrowRight, BarChart2 } from 'lucide-react';
+import { useJobs } from '../api/jobs';
+import { useApplications } from '../api/applications';
+import { useTimeToHire } from '../api/reports';
 
 export default function DashboardPage() {
-  const { data, isLoading } = useJobs();
+  const { data: jobs, isLoading } = useJobs('open');
+  // Only the total is needed, so ask for the smallest page the API allows.
+  const { data: activeResult, isLoading: appsLoading } = useApplications({ limit: 1 });
+  const { data: timeToHire, isLoading: tthLoading } = useTimeToHire();
+
+  const totalCandidates = activeResult?.total ?? 0;
+
+  const avgDaysToHire = timeToHire?.length
+    ? Math.round(timeToHire.reduce((sum, d) => sum + d.avg_days, 0) / timeToHire.length)
+    : null;
 
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Dashboard</h1>
-        <p className="text-slate-400 mt-1">Here is what is happening with your hiring today.</p>
+        <h2 className="text-xl font-bold text-slate-100">Dashboard</h2>
+        <p className="text-slate-400 mt-0.5 text-sm">Here's what's happening with your hiring today.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Total Open Jobs</CardTitle>
-            <Briefcase className="h-4 w-4 text-brand-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{isLoading ? '-' : data?.total || 0}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Applications (This Month)</CardTitle>
-            <Users className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">142</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Avg Time to Hire</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">18 days</div>
-          </CardContent>
-        </Card>
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          {
+            label: 'Open Jobs',
+            value: isLoading ? '–' : String(jobs?.length ?? 0),
+            icon: <Briefcase size={18} className="text-brand-400" />,
+            color: 'bg-brand-500/10',
+          },
+          {
+            label: 'Total Candidates',
+            value: appsLoading ? '–' : String(totalCandidates),
+            icon: <Users size={18} className="text-emerald-400" />,
+            color: 'bg-emerald-500/10',
+          },
+          {
+            label: 'Avg. Time to Hire',
+            value: tthLoading || avgDaysToHire === null ? '–' : `${avgDaysToHire}d`,
+            icon: <Clock size={18} className="text-amber-400" />,
+            color: 'bg-amber-500/10',
+          },
+        ].map((stat) => (
+          <div key={stat.label} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400">{stat.label}</span>
+              <div className={`p-1.5 rounded-lg ${stat.color}`}>{stat.icon}</div>
+            </div>
+            <div className="text-2xl font-bold text-slate-100">{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Recent Applications</CardTitle>
-              <p className="text-sm text-slate-400 mt-1">Latest candidates who applied to your open roles.</p>
+        {/* Recent jobs */}
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-300">Open Positions</h3>
+            <Link to="/app/jobs" className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+              View all <ArrowRight size={12} />
+            </Link>
+          </div>
+          {!jobs?.length ? (
+            <div className="py-12 text-center text-sm text-slate-500">
+              No open jobs yet.{' '}
+              <Link to="/app/jobs/create" className="text-brand-400 hover:underline">Create one →</Link>
             </div>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/app/applicants">View All <ArrowRight className="ml-2 h-4 w-4" /></Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-slate-400 py-8 text-center border border-dashed border-slate-800 rounded-lg">
-              No recent applications. Check back later.
+          ) : (
+            <div className="divide-y divide-slate-800/60">
+              {jobs.slice(0, 5).map((job) => (
+                <div key={job.id} className="flex items-center justify-between px-5 py-3 hover:bg-slate-800/30 transition-colors">
+                  <div>
+                    <Link to={`/app/jobs/${job.id}/pipeline`} className="text-sm font-medium text-slate-200 hover:text-brand-400 transition-colors">
+                      {job.title}
+                    </Link>
+                    <div className="text-xs text-slate-500 mt-0.5">{job.location}</div>
+                  </div>
+                  <Link
+                    to={`/app/jobs/${job.id}/pipeline`}
+                    className="text-xs text-slate-400 hover:text-brand-400 transition-colors"
+                  >
+                    Pipeline →
+                  </Link>
+                </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full justify-start" variant="secondary" asChild>
-              <Link to="/app/jobs/create"><Briefcase className="mr-2 h-4 w-4" /> Create New Job</Link>
-            </Button>
-            <Button className="w-full justify-start" variant="secondary" asChild>
-              <Link to="/app/reports"><BarChart2 className="mr-2 h-4 w-4" /> View Reports</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Quick actions */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-slate-300 mb-4">Quick Actions</h3>
+          <div className="space-y-2">
+            {[
+              { to: '/app/jobs/create', icon: <Briefcase size={14} />, label: 'Create New Job' },
+              { to: '/app/applicants', icon: <Users size={14} />, label: 'View All Applicants' },
+              { to: '/app/reports', icon: <BarChart2 size={14} />, label: 'View Reports' },
+            ].map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                {action.icon} {action.label}
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-// Import required for the Quick Actions
-import { BarChart2 } from 'lucide-react';

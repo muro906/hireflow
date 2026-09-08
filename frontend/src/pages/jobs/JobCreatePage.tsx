@@ -1,19 +1,13 @@
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { useCreateJob } from '../../api/jobs';
 import { Spinner } from '../../components/ui/Spinner';
-import type { FieldType } from '../../types';
-
-const fieldSchema = z.object({
-  id: z.string(),
-  label: z.string().min(1, 'Label required'),
-  type: z.enum(['text','textarea','number','url','email','select','checkbox','date','file']),
-  required: z.boolean(),
-  options: z.string().optional(),
-});
+import { useUiStore } from '../../store/ui';
+import { FieldBuilder } from '../../components/forms/FieldBuilder';
+import type { FormField } from '../../types';
 
 const schema = z.object({
   title: z.string().min(1, 'Title required'),
@@ -21,45 +15,41 @@ const schema = z.object({
   location: z.string().optional(),
   employment_type: z.string().optional(),
   status: z.enum(['draft', 'open']),
-  fields: z.array(fieldSchema),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-const FIELD_TYPES: FieldType[] = ['text','textarea','number','url','email','select','checkbox','date','file'];
-
 export default function JobCreatePage() {
   const navigate = useNavigate();
+  const addToast = useUiStore((s) => s.addToast);
   const createJob = useCreateJob();
 
-  const { register, control, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const [fields, setFields] = useState<FormField[]>([]);
+
+  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       status: 'draft',
-      fields: [],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'fields' });
-
   const onSubmit = (data: FormValues) => {
-    const form_schema = {
-      fields: data.fields.map((f) => ({
-        id: f.id,
-        label: f.label,
-        type: f.type,
-        required: f.required,
-        options: f.type === 'select' ? (f.options ?? '').split(',').map((o) => o.trim()).filter(Boolean) : undefined,
-      })),
-    };
+    const form_schema = { fields };
     createJob.mutate(
       { title: data.title, description: data.description ?? '', location: data.location ?? '', employment_type: data.employment_type ?? 'full-time', status: data.status, form_schema },
-      { onSuccess: (job) => navigate(`/app/jobs/${job.id}/pipeline`) },
+      {
+        onSuccess: (job) => {
+          addToast({ title: 'Job created', description: job.title, variant: 'success' });
+          navigate(`/app/jobs/${job.id}/pipeline`);
+        },
+        onError: () =>
+          addToast({ title: 'Could not create job', description: 'Please try again.', variant: 'error' }),
+      },
     );
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h2 className="text-xl font-bold text-slate-100">New Job Posting</h2>
         <p className="text-sm text-slate-400 mt-1">Fill in the details and build the application form.</p>
@@ -100,45 +90,8 @@ export default function JobCreatePage() {
 
         {/* Form builder */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-300">Application form fields</h3>
-            <button type="button" onClick={() => append({ id: crypto.randomUUID(), label: '', type: 'text', required: false, options: '' })}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 rounded-lg transition-colors">
-              <Plus size={12} /> Add field
-            </button>
-          </div>
-          <p className="text-xs text-slate-500">Name, email, and phone are always included automatically.</p>
-
-          {fields.length === 0 && (
-            <div className="text-center py-6 text-slate-600 text-sm border border-dashed border-slate-800 rounded-lg">
-              No custom fields yet
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {fields.map((f, i) => (
-              <div key={f.id} className="flex gap-3 items-start bg-slate-800/50 rounded-lg p-3">
-                <GripVertical size={14} className="text-slate-600 mt-2 flex-shrink-0" />
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input {...register(`fields.${i}.label`)} placeholder="Field label"
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-                  <select {...register(`fields.${i}.type`)}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                    {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
-                      <input type="checkbox" {...register(`fields.${i}.required`)} className="rounded border-slate-600" />
-                      Required
-                    </label>
-                  </div>
-                </div>
-                <button type="button" onClick={() => remove(i)} className="p-1.5 text-slate-600 hover:text-rose-400 transition-colors flex-shrink-0">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
+          <h3 className="text-sm font-semibold text-slate-300">Application form</h3>
+          <FieldBuilder onChange={setFields} />
         </div>
 
         <div className="flex justify-end gap-3">

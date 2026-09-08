@@ -18,7 +18,7 @@ export function ConversionChart() {
     );
   }
 
-  if (!data?.stages?.length) {
+  if (!data?.length) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-500">
         No pipeline data yet
@@ -26,10 +26,11 @@ export function ConversionChart() {
     );
   }
 
-  const chartData = data.stages.map((s) => ({
-    name: s.name,
+  // conversion_rate arrives from the API as a percentage already.
+  const chartData = data.map((s) => ({
+    name: s.stage_name,
     entered: s.entered,
-    rate: Math.round(s.conversion_rate * 100),
+    rate: Math.round(s.conversion_rate),
   }));
 
   return (

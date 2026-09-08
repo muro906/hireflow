@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import client from './client';
+import { useUiStore } from '../store/ui';
 import type { PipelineData } from '../types';
 
 export const pipelineApi = {
@@ -58,6 +59,11 @@ export function useMoveStage(jobId: string) {
       if (ctx?.previous) {
         qc.setQueryData(['pipeline', jobId], ctx.previous);
       }
+      useUiStore.getState().addToast({
+        title: 'Could not move candidate',
+        description: 'The card was returned to its previous stage.',
+        variant: 'error',
+      });
     },
 
     onSettled: () => {
