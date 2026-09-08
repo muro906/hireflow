@@ -78,10 +78,12 @@ type ApplicationFile struct {
 type Note struct {
 	ID            uuid.UUID `db:"id" json:"id"`
 	ApplicationID uuid.UUID `db:"application_id" json:"application_id"`
-	UserID        uuid.UUID `db:"user_id" json:"user_id"`
-	Body          string    `db:"body" json:"body"`
-	CreatedAt     time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
+	// UserID is null once the author's account has been deleted.
+	UserID    *uuid.UUID `db:"user_id" json:"user_id"`
+	UserName  string     `db:"user_name" json:"user_name"`
+	Body      string     `db:"body" json:"body"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 type StageHistory struct {

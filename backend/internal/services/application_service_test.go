@@ -35,15 +35,8 @@ func newFixture(t *testing.T, pool *pgxpool.Pool) fixture {
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-		// stage_history.moved_by references users with no ON DELETE CASCADE, so
-		// applications (which do cascade to stage_history) must go first.
-		if _, err := pool.Exec(ctx,
-			"DELETE FROM applications WHERE job_id IN (SELECT id FROM jobs WHERE company_id = $1)", f.companyID,
-		); err != nil {
-			t.Errorf("cleanup applications: %v", err)
-		}
-		if _, err := pool.Exec(ctx, "DELETE FROM companies WHERE id = $1", f.companyID); err != nil {
+		// Everything cascades from the company (migration 000003).
+		if _, err := pool.Exec(context.Background(), "DELETE FROM companies WHERE id = $1", f.companyID); err != nil {
 			t.Errorf("cleanup company: %v", err)
 		}
 	})
@@ -277,5 +270,99 @@ func TestListStageHistoryIsScopedToCompany(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("other tenant read %d history entries, want 0", len(entries))
+	}
+}
+
+// Removing a recruiter must not erase the notes and audit trail they left behind;
+// the rows survive with their attribution cleared.
+func TestDeletingAuthorKeepsNotesAndHistory(t *testing.T) {
+	pool := testPool(t)
+	f := newFixture(t, pool)
+	svc := NewApplicationService(pool, nil)
+	ctx := context.Background()
+
+	appID := f.apply(t, svc, "Ada", "ada@test.dev")
+
+	if _, err := svc.AddNote(ctx, f.companyID, f.userID, appID, "Strong candidate"); err != nil {
+		t.Fatalf("add note: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO stage_history (application_id, from_stage_id, to_stage_id, moved_by)
+		VALUES ($1, $2, $3, $4)
+	`, appID, f.stageIDs[0], f.stageIDs[1], f.userID); err != nil {
+		t.Fatalf("insert history: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, "DELETE FROM users WHERE id = $1", f.userID); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	notes, err := svc.ListNotes(ctx, f.companyID, appID)
+	if err != nil {
+		t.Fatalf("list notes: %v", err)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("got %d notes after deleting the author, want 1", len(notes))
+	}
+	if notes[0].Body != "Strong candidate" {
+		t.Errorf("note body = %q, want it unchanged", notes[0].Body)
+	}
+	if notes[0].UserName != "Deleted user" {
+		t.Errorf("note author = %q, want %q", notes[0].UserName, "Deleted user")
+	}
+
+	entries, err := svc.ListStageHistory(ctx, f.companyID, appID)
+	if err != nil {
+		t.Fatalf("list history: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d history entries after deleting the mover, want 1", len(entries))
+	}
+	if entries[0].MovedByName != "Deleted user" {
+		t.Errorf("moved_by_name = %q, want %q", entries[0].MovedByName, "Deleted user")
+	}
+}
+
+// The applicant timeline shows who wrote each note, so the API must return the
+// author's name and not just their id.
+func TestAddNoteReturnsAuthorName(t *testing.T) {
+	pool := testPool(t)
+	f := newFixture(t, pool)
+	svc := NewApplicationService(pool, nil)
+	ctx := context.Background()
+
+	appID := f.apply(t, svc, "Ada", "ada@test.dev")
+
+	note, err := svc.AddNote(ctx, f.companyID, f.userID, appID, "First impression")
+	if err != nil {
+		t.Fatalf("add note: %v", err)
+	}
+	if note.UserName != "Test Recruiter" {
+		t.Errorf("user_name = %q, want Test Recruiter", note.UserName)
+	}
+
+	listed, err := svc.ListNotes(ctx, f.companyID, appID)
+	if err != nil {
+		t.Fatalf("list notes: %v", err)
+	}
+	if len(listed) != 1 || listed[0].UserName != "Test Recruiter" {
+		t.Errorf("listed notes = %+v, want one authored by Test Recruiter", listed)
+	}
+}
+
+// An application with no notes must serialise as [] rather than null.
+func TestListNotesEmptyIsNotNull(t *testing.T) {
+	pool := testPool(t)
+	f := newFixture(t, pool)
+	svc := NewApplicationService(pool, nil)
+
+	appID := f.apply(t, svc, "Fresh", "fresh@test.dev")
+
+	notes, err := svc.ListNotes(context.Background(), f.companyID, appID)
+	if err != nil {
+		t.Fatalf("list notes: %v", err)
+	}
+	if notes == nil {
+		t.Error("notes = nil, want an empty slice")
 	}
 }

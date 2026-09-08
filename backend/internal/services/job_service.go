@@ -177,10 +177,16 @@ func (s *JobService) UpdateJob(ctx context.Context, companyID, jobID uuid.UUID, 
 
 // ─── DeleteJob ────────────────────────────────────────────────────────────────
 
+// DeleteJob archives a job by closing it, which is what the API documents and
+// what the UI promises ("existing applicants are kept"). It is deliberately not
+// a DELETE: that would discard every application, note and file attached to the
+// job, and it failed outright once any candidate had moved between stages.
 func (s *JobService) DeleteJob(ctx context.Context, companyID, jobID uuid.UUID) error {
-	tag, err := s.db.Exec(ctx, "DELETE FROM jobs WHERE id = $1 AND company_id = $2", jobID, companyID)
+	tag, err := s.db.Exec(ctx,
+		"UPDATE jobs SET status = 'closed', updated_at = NOW() WHERE id = $1 AND company_id = $2",
+		jobID, companyID)
 	if err != nil {
-		return fmt.Errorf("delete job: %w", err)
+		return fmt.Errorf("archive job: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("job not found")

@@ -221,11 +221,17 @@ func (s *ApplicationService) AddNote(ctx context.Context, companyID, userID, app
 
 	var note models.Note
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO notes (application_id, user_id, body)
-		VALUES ($1, $2, $3)
-		RETURNING id, application_id, user_id, body, created_at, updated_at
+		WITH inserted AS (
+			INSERT INTO notes (application_id, user_id, body)
+			VALUES ($1, $2, $3)
+			RETURNING id, application_id, user_id, body, created_at, updated_at
+		)
+		SELECT i.id, i.application_id, i.user_id, COALESCE(u.full_name, 'Deleted user'),
+		       i.body, i.created_at, i.updated_at
+		FROM inserted i
+		LEFT JOIN users u ON i.user_id = u.id
 	`, appID, userID, body).Scan(
-		&note.ID, &note.ApplicationID, &note.UserID, &note.Body, &note.CreatedAt, &note.UpdatedAt,
+		&note.ID, &note.ApplicationID, &note.UserID, &note.UserName, &note.Body, &note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert note: %w", err)
@@ -235,10 +241,12 @@ func (s *ApplicationService) AddNote(ctx context.Context, companyID, userID, app
 
 func (s *ApplicationService) ListNotes(ctx context.Context, companyID, appID uuid.UUID) ([]models.Note, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT n.id, n.application_id, n.user_id, n.body, n.created_at, n.updated_at
+		SELECT n.id, n.application_id, n.user_id, COALESCE(u.full_name, 'Deleted user'),
+		       n.body, n.created_at, n.updated_at
 		FROM notes n
 		JOIN applications a ON n.application_id = a.id
 		JOIN jobs j ON a.job_id = j.id
+		LEFT JOIN users u ON n.user_id = u.id
 		WHERE n.application_id = $1 AND j.company_id = $2
 		ORDER BY n.created_at ASC
 	`, appID, companyID)
@@ -247,10 +255,10 @@ func (s *ApplicationService) ListNotes(ctx context.Context, companyID, appID uui
 	}
 	defer rows.Close()
 
-	var notes []models.Note
+	notes := []models.Note{}
 	for rows.Next() {
 		var n models.Note
-		if err := rows.Scan(&n.ID, &n.ApplicationID, &n.UserID, &n.Body, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.ApplicationID, &n.UserID, &n.UserName, &n.Body, &n.CreatedAt, &n.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan note: %w", err)
 		}
 		notes = append(notes, n)
@@ -291,13 +299,13 @@ type StageHistoryEntry struct {
 
 func (s *ApplicationService) ListStageHistory(ctx context.Context, companyID, appID uuid.UUID) ([]StageHistoryEntry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT h.id, from_stage.name, to_stage.name, u.full_name, h.moved_at
+		SELECT h.id, from_stage.name, to_stage.name, COALESCE(u.full_name, 'Deleted user'), h.moved_at
 		FROM stage_history h
 		JOIN applications a ON h.application_id = a.id
 		JOIN jobs j ON a.job_id = j.id
 		JOIN pipeline_stages to_stage ON h.to_stage_id = to_stage.id
 		LEFT JOIN pipeline_stages from_stage ON h.from_stage_id = from_stage.id
-		JOIN users u ON h.moved_by = u.id
+		LEFT JOIN users u ON h.moved_by = u.id
 		WHERE h.application_id = $1 AND j.company_id = $2
 		ORDER BY h.moved_at DESC
 	`, appID, companyID)

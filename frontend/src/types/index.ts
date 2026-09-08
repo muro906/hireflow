@@ -76,7 +76,8 @@ export interface ApplicationFile {
 export interface Note {
   id: string;
   application_id: string;
-  user_id: string;
+  /** Null once the author's account has been deleted; user_name reads "Deleted user". */
+  user_id: string | null;
   user_name: string;
   body: string;
   created_at: string;
