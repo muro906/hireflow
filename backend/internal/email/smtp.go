@@ -7,6 +7,8 @@ import (
 	"html/template"
 	"net/smtp"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/hireflow/hireflow/backend/internal/config"
 )
@@ -34,14 +36,27 @@ func (m *smtpMailer) SendStageChange(ctx context.Context, data StageChangeData) 
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	msg := []byte(
-		"Subject: Update on your application for " + data.JobTitle + "\r\n" +
-			"MIME-version: 1.0;\r\nContent-Type: text/html; charset=\"UTF-8\";\r\n\r\n" +
-			body.String(),
-	)
+	// From, To and Date are required headers. Sending them only in the SMTP
+	// envelope left the message itself without them, which mail clients show as
+	// a blank sender and spam filters score heavily against.
+	headers := []string{
+		"From: " + fromAddress(m.cfg),
+		"To: " + data.ToEmail,
+		"Subject: " + stageChangeSubject(data.JobTitle),
+		"Date: " + time.Now().Format(time.RFC1123Z),
+		"MIME-Version: 1.0",
+		`Content-Type: text/html; charset="UTF-8"`,
+	}
+	msg := []byte(strings.Join(headers, "\r\n") + "\r\n\r\n" + body.String())
 
-	auth := smtp.PlainAuth("", m.cfg.SMTPUser, m.cfg.SMTPPass, m.cfg.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", m.cfg.SMTPHost, m.cfg.SMTPPort)
+
+	// PlainAuth refuses to run over an unencrypted link, so only offer it when
+	// credentials are actually configured; local relays such as MailHog take none.
+	var auth smtp.Auth
+	if m.cfg.SMTPUser != "" {
+		auth = smtp.PlainAuth("", m.cfg.SMTPUser, m.cfg.SMTPPass, m.cfg.SMTPHost)
+	}
 
 	if err := smtp.SendMail(addr, auth, m.cfg.EmailFrom, []string{data.ToEmail}, msg); err != nil {
 		return fmt.Errorf("failed to send email: %w", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -217,15 +218,32 @@ func (s *ApplicationService) MoveStage(ctx context.Context, companyID, userID, a
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	// Enqueue email notification (best-effort, non-blocking)
+	// Enqueue the notification. This is best-effort: the move has already been
+	// committed and must not fail because mail is down. Log failures rather than
+	// discarding them — a silently dropped enqueue is why no stage-change email
+	// was ever delivered.
+	if err := s.enqueueStageChangeEmail(appID, newStageID); err != nil {
+		log.Printf("stage-change email not queued for application %s: %v", appID, err)
+	}
+
+	return nil
+}
+
+func (s *ApplicationService) enqueueStageChangeEmail(appID, newStageID uuid.UUID) error {
+	if s.queue == nil {
+		return nil // no queue configured (tests)
+	}
+
 	task, err := worker.NewEmailStageChangeTask(worker.EmailStageChangePayload{
 		ApplicationID: appID.String(),
 		ToStageID:     newStageID.String(),
 	})
-	if err == nil {
-		s.queue.Enqueue(task) //nolint:errcheck
+	if err != nil {
+		return fmt.Errorf("build task: %w", err)
 	}
-
+	if _, err := s.queue.Enqueue(task); err != nil {
+		return fmt.Errorf("enqueue: %w", err)
+	}
 	return nil
 }
 

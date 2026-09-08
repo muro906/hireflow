@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
@@ -62,6 +64,11 @@ func uniqueSlug(ctx context.Context, tx pgx.Tx, base string) (string, error) {
 	return fmt.Sprintf("%s-%s", base, uuid.NewString()[:8]), nil
 }
 
+// ErrEmailTaken is returned when the address already belongs to an account.
+// Registering it again used to succeed and produce an account that could never
+// log in, because login resolves an address to exactly one user.
+var ErrEmailTaken = errors.New("an account with that email already exists")
+
 func (s *AuthService) Register(ctx context.Context, companyName, email, password, fullName string) (*models.User, string, string, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -94,6 +101,10 @@ func (s *AuthService) Register(ctx context.Context, companyName, email, password
 		&user.ID, &user.CompanyID, &user.Email, &user.FullName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, "", "", ErrEmailTaken
+		}
 		return nil, "", "", fmt.Errorf("insert user: %w", err)
 	}
 
@@ -139,7 +150,10 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("invalid refresh token: %w", err)
 	}
 
-	s.rdb.Del(ctx, fmt.Sprintf("refresh:%s", refreshToken))
+	if err := s.rdb.Del(ctx, fmt.Sprintf("refresh:%s", refreshToken)).Err(); err != nil {
+		// Refusing is safer than issuing a new pair while the old token lives on.
+		return "", "", fmt.Errorf("rotate refresh token: %w", err)
+	}
 
 	var companyID string
 	err = s.db.QueryRow(ctx, "SELECT company_id FROM users WHERE id = $1", userID).Scan(&companyID)
@@ -169,7 +183,10 @@ func (s *AuthService) generateTokens(ctx context.Context, userID, companyID stri
 	}
 
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Never fall through to the zero value: that is a predictable token.
+		return "", "", fmt.Errorf("generate refresh token: %w", err)
+	}
 	refreshToken := hex.EncodeToString(b)
 
 	err = s.rdb.Set(ctx, fmt.Sprintf("refresh:%s", refreshToken), userID, 7*24*time.Hour).Err()

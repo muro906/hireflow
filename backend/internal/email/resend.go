@@ -38,7 +38,7 @@ func (m *resendMailer) SendStageChange(ctx context.Context, data StageChangeData
 	}
 
 	params := &resend.SendEmailRequest{
-		From:    m.cfg.EmailFrom,
+		From:    fromAddress(m.cfg),
 		To:      []string{data.ToEmail},
 		Subject: fmt.Sprintf("Update on your application for %s", data.JobTitle),
 		Html:    body.String(),

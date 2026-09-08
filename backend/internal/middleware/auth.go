@@ -26,9 +26,11 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		tokenStr := parts[1]
+		// Pin the algorithm: without this the key function hands the HMAC secret
+		// to whatever the token's own header asks for.
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 			return []byte(cfg.JWTSecret), nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})

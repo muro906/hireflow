@@ -39,7 +39,11 @@ func main() {
 		log.Fatalf("failed to init storage: %v", err)
 	}
 
-	queue := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisURL})
+	queueOpt, err := redis.AsynqOpt(cfg)
+	if err != nil {
+		log.Fatalf("failed to configure task queue: %v", err)
+	}
+	queue := asynq.NewClient(queueOpt)
 	defer queue.Close()
 
 	r := handlers.SetupRouter(cfg, pool, rdb, store, queue)
