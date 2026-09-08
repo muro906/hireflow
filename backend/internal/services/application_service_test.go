@@ -211,25 +211,37 @@ func TestListStageHistoryResolvesNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("history: %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("got %d entries, want 1", len(entries))
+	// The apply itself is recorded, so the move is the second entry.
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2 (the application and the move)", len(entries))
 	}
 
-	e := entries[0]
+	e := findEntry(t, entries, "Screened")
 	if e.FromStageName == nil || *e.FromStageName != "Applied" {
 		t.Errorf("from_stage_name = %v, want Applied", e.FromStageName)
-	}
-	if e.ToStageName != "Screened" {
-		t.Errorf("to_stage_name = %q, want Screened", e.ToStageName)
 	}
 	if e.MovedByName != "Test Recruiter" {
 		t.Errorf("moved_by_name = %q, want Test Recruiter", e.MovedByName)
 	}
 }
 
-// An application with no moves yet must return an empty list, not null, so the
-// frontend can map over it directly.
-func TestListStageHistoryEmptyIsNotNull(t *testing.T) {
+// findEntry locates the transition into a named stage, so tests do not depend on
+// the ordering of rows written in the same instant.
+func findEntry(t *testing.T, entries []StageHistoryEntry, toStage string) StageHistoryEntry {
+	t.Helper()
+	for _, e := range entries {
+		if e.ToStageName == toStage {
+			return e
+		}
+	}
+	t.Fatalf("no history entry into stage %q in %+v", toStage, entries)
+	return StageHistoryEntry{}
+}
+
+// Applying is itself a pipeline event. Without it the candidate has no history
+// until someone moves them, and the conversion funnel counts nobody as having
+// entered the first stage.
+func TestApplyRecordsEntryIntoFirstStage(t *testing.T) {
 	pool := testPool(t)
 	f := newFixture(t, pool)
 	svc := NewApplicationService(pool, nil)
@@ -240,11 +252,41 @@ func TestListStageHistoryEmptyIsNotNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("history: %v", err)
 	}
-	if entries == nil {
-		t.Error("history = nil, want an empty slice so it serialises as []")
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1 for a fresh application", len(entries))
 	}
-	if len(entries) != 0 {
-		t.Errorf("got %d entries, want 0", len(entries))
+
+	e := entries[0]
+	if e.FromStageName != nil {
+		t.Errorf("from_stage_name = %v, want nil: nothing precedes applying", e.FromStageName)
+	}
+	if e.ToStageName != "Applied" {
+		t.Errorf("to_stage_name = %q, want Applied", e.ToStageName)
+	}
+	// Nobody moved them, so the row must not be attributed to a recruiter — nor
+	// mislabelled as a deleted account.
+	if e.MovedByName != "Candidate" {
+		t.Errorf("moved_by_name = %q, want Candidate", e.MovedByName)
+	}
+}
+
+// A failed history write must not leave a half-applied candidate behind.
+func TestApplyIsAtomic(t *testing.T) {
+	pool := testPool(t)
+	f := newFixture(t, pool)
+	svc := NewApplicationService(pool, nil)
+	ctx := context.Background()
+
+	appID := f.apply(t, svc, "Ada", "ada@test.dev")
+
+	var histCount int
+	if err := pool.QueryRow(ctx,
+		"SELECT count(*) FROM stage_history WHERE application_id = $1", appID,
+	).Scan(&histCount); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if histCount != 1 {
+		t.Errorf("history rows = %d, want 1 written alongside the application", histCount)
 	}
 }
 
@@ -315,11 +357,18 @@ func TestDeletingAuthorKeepsNotesAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list history: %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("got %d history entries after deleting the mover, want 1", len(entries))
+	if len(entries) != 2 {
+		t.Fatalf("got %d history entries after deleting the mover, want 2", len(entries))
 	}
-	if entries[0].MovedByName != "Deleted user" {
-		t.Errorf("moved_by_name = %q, want %q", entries[0].MovedByName, "Deleted user")
+
+	moved := findEntry(t, entries, "Screened")
+	if moved.MovedByName != "Deleted user" {
+		t.Errorf("mover = %q, want %q", moved.MovedByName, "Deleted user")
+	}
+	// The candidate's own application must not be relabelled as a deleted account.
+	applied := findEntry(t, entries, "Applied")
+	if applied.MovedByName != "Candidate" {
+		t.Errorf("application entry = %q, want Candidate", applied.MovedByName)
 	}
 }
 

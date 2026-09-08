@@ -35,8 +35,14 @@ func (s *ApplicationService) Apply(ctx context.Context, jobID uuid.UUID, name, e
 		formData = json.RawMessage(`{}`)
 	}
 
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
+
 	var app models.Application
-	err = s.db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO applications (job_id, stage_id, candidate_name, candidate_email, candidate_phone, form_data)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, job_id, stage_id, candidate_name, candidate_email, candidate_phone, form_data, applied_at, hired_at, rejected_at
@@ -45,6 +51,23 @@ func (s *ApplicationService) Apply(ctx context.Context, jobID uuid.UUID, name, e
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert application: %w", err)
+	}
+
+	// Record entry into the first stage. Without this the candidate has no
+	// history until a recruiter moves them, which left the conversion funnel
+	// reporting nobody as having entered the first stage. moved_by is null
+	// because the candidate applied themselves; a null from_stage_id is what
+	// marks the row as the application itself rather than a recruiter's move.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO stage_history (application_id, from_stage_id, to_stage_id, moved_by)
+		VALUES ($1, NULL, $2, NULL)
+	`, app.ID, stageID)
+	if err != nil {
+		return nil, fmt.Errorf("insert application history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return &app, nil
@@ -299,7 +322,12 @@ type StageHistoryEntry struct {
 
 func (s *ApplicationService) ListStageHistory(ctx context.Context, companyID, appID uuid.UUID) ([]StageHistoryEntry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT h.id, from_stage.name, to_stage.name, COALESCE(u.full_name, 'Deleted user'), h.moved_at
+		SELECT h.id, from_stage.name, to_stage.name,
+		       CASE
+		         WHEN h.moved_by IS NULL AND h.from_stage_id IS NULL THEN 'Candidate'
+		         ELSE COALESCE(u.full_name, 'Deleted user')
+		       END,
+		       h.moved_at
 		FROM stage_history h
 		JOIN applications a ON h.application_id = a.id
 		JOIN jobs j ON a.job_id = j.id

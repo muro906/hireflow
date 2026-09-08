@@ -93,7 +93,7 @@ func (s *JobService) GetJobs(ctx context.Context, companyID uuid.UUID, status st
 	}
 	defer rows.Close()
 
-	var jobs []models.Job
+	jobs := []models.Job{}
 	for rows.Next() {
 		var job models.Job
 		if err := rows.Scan(&job.ID, &job.CompanyID, &job.Title, &job.Description, &job.Location, &job.EmploymentType, &job.Status, &job.FormSchema, &job.CreatedAt, &job.UpdatedAt); err != nil {

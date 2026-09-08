@@ -103,13 +103,12 @@ export interface TimeToHireData {
   avg_days: number;
 }
 
+/** One pipeline stage's throughput. `conversion_rate` is already a percentage. */
 export interface ConversionData {
-  stages: Array<{
-    name: string;
-    entered: number;
-    exited: number;
-    conversion_rate: number;
-  }>;
+  stage_name: string;
+  entered: number;
+  exited: number;
+  conversion_rate: number;
 }
 
 export interface AuthTokens {
