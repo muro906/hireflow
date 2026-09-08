@@ -54,16 +54,27 @@ func (s *PipelineService) GetPipeline(ctx context.Context, companyID, jobID uuid
 	
 	for rows.Next() {
 		var stg models.PipelineStage
-		var app models.Application
-		var appID *uuid.UUID
-		
+		// All application columns are nullable due to LEFT JOIN
+		var (
+			appID    *uuid.UUID
+			appJobID *uuid.UUID
+			appStageID *uuid.UUID
+			appName  *string
+			appEmail *string
+			appPhone *string
+			appFormData []byte
+			appAppliedAt *interface{}
+			appHiredAt   *interface{}
+			appRejectedAt *interface{}
+		)
+
 		if err := rows.Scan(
 			&stg.ID, &stg.CompanyID, &stg.JobID, &stg.Name, &stg.Position, &stg.Color, &stg.IsTerminal, &stg.CreatedAt,
-			&appID, &app.JobID, &app.StageID, &app.CandidateName, &app.CandidateEmail, &app.CandidatePhone, &app.FormData, &app.AppliedAt, &app.HiredAt, &app.RejectedAt,
+			&appID, &appJobID, &appStageID, &appName, &appEmail, &appPhone, &appFormData, &appAppliedAt, &appHiredAt, &appRejectedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan pipeline row: %w", err)
 		}
-		
+
 		if !stagesMap[stg.ID] {
 			res.Stages = append(res.Stages, stg)
 			stagesMap[stg.ID] = true
@@ -71,12 +82,32 @@ func (s *PipelineService) GetPipeline(ctx context.Context, companyID, jobID uuid
 				res.Applications[stg.ID] = []models.Application{}
 			}
 		}
-		
+
 		if appID != nil {
-			app.ID = *appID
+			app := models.Application{
+				ID:             *appID,
+				CandidateName:  derefStr(appName),
+				CandidateEmail: derefStr(appEmail),
+				CandidatePhone: derefStr(appPhone),
+				FormData:       appFormData,
+			}
+			if appJobID != nil {
+				app.JobID = *appJobID
+			}
+			if appStageID != nil {
+				app.StageID = *appStageID
+			}
 			res.Applications[stg.ID] = append(res.Applications[stg.ID], app)
 		}
 	}
 
+
 	return res, nil
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

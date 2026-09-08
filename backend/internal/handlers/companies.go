@@ -1,47 +1,47 @@
 package handlers
 
 import (
-\t"net/http"
+	"net/http"
 
-\t"github.com/gin-gonic/gin"
-\t"github.com/hireflow/hireflow/backend/internal/middleware"
-\t"github.com/hireflow/hireflow/backend/internal/services"
+	"github.com/gin-gonic/gin"
+	"github.com/hireflow/hireflow/backend/internal/middleware"
+	"github.com/hireflow/hireflow/backend/internal/services"
 )
 
 type CompanyHandler struct {
-\tsvc *services.CompanyService
+	svc *services.CompanyService
 }
 
 func NewCompanyHandler(svc *services.CompanyService) *CompanyHandler {
-\treturn &CompanyHandler{svc: svc}
+	return &CompanyHandler{svc: svc}
 }
 
 func (h *CompanyHandler) GetMe(c *gin.Context) {
-\tcID, _ := middleware.GetCompanyID(c)
-\tcomp, err := h.svc.GetCompany(c.Request.Context(), cID)
-\tif err != nil {
-\t\tc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-\t\treturn
-\t}
-\tc.JSON(http.StatusOK, comp)
+	cID, _ := middleware.GetCompanyID(c)
+	comp, err := h.svc.GetCompany(c.Request.Context(), cID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, comp)
 }
 
 type updateReq struct {
-\tName string `json:"name" binding:"required"`
+	Name string `json:"name" binding:"required"`
 }
 
 func (h *CompanyHandler) UpdateMe(c *gin.Context) {
-\tcID, _ := middleware.GetCompanyID(c)
-\tvar req updateReq
-\tif err := c.ShouldBindJSON(&req); err != nil {
-\t\tc.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-\t\treturn
-\t}
+	cID, _ := middleware.GetCompanyID(c)
+	var req updateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-\tcomp, err := h.svc.UpdateCompany(c.Request.Context(), cID, req.Name)
-\tif err != nil {
-\t\tc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-\t\treturn
-\t}
-\tc.JSON(http.StatusOK, comp)
+	comp, err := h.svc.UpdateCompany(c.Request.Context(), cID, req.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, comp)
 }

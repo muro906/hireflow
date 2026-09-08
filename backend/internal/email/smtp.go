@@ -34,14 +34,11 @@ func (m *smtpMailer) SendStageChange(ctx context.Context, data StageChangeData) 
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	subject := fmt.Sprintf("Subject: Update on your application for %s
-", data.JobTitle)
-	mime := "MIME-version: 1.0;
-Content-Type: text/html; charset=\"UTF-8\";
-
-"
-	
-	msg := []byte(subject + mime + body.String())
+	msg := []byte(
+		"Subject: Update on your application for " + data.JobTitle + "\r\n" +
+			"MIME-version: 1.0;\r\nContent-Type: text/html; charset=\"UTF-8\";\r\n\r\n" +
+			body.String(),
+	)
 
 	auth := smtp.PlainAuth("", m.cfg.SMTPUser, m.cfg.SMTPPass, m.cfg.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", m.cfg.SMTPHost, m.cfg.SMTPPort)

@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
 
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	originsMap := make(map[string]bool)
