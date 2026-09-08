@@ -31,8 +31,9 @@ function SortableFieldItem({ field, onUpdate, onRemove }: { field: FormField; on
       <div className="flex-1 space-y-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1 w-full max-w-md">
-            <label className="text-xs text-slate-400">Field Label</label>
-            <Input 
+            <label htmlFor={`${field.id}-label`} className="text-xs text-slate-400">Field Label</label>
+            <Input
+              id={`${field.id}-label`}
               value={field.label} 
               onChange={(e) => onUpdate(field.id, { label: e.target.value })}
               placeholder="E.g., What is your experience?"
@@ -40,8 +41,9 @@ function SortableFieldItem({ field, onUpdate, onRemove }: { field: FormField; on
           </div>
           <div className="flex items-center gap-2">
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Type</label>
+              <label htmlFor={`${field.id}-type`} className="text-xs text-slate-400">Type</label>
               <Select
+                id={`${field.id}-type`}
                 value={field.type}
                 options={FIELD_TYPES.map(t => ({ value: t.type, label: t.label }))}
                 onChange={(e) => {
@@ -79,8 +81,9 @@ function SortableFieldItem({ field, onUpdate, onRemove }: { field: FormField; on
 
         {field.type === 'select' && (
           <div className="space-y-1">
-            <label className="text-xs text-slate-400">Options (comma-separated)</label>
-            <Input 
+            <label htmlFor={`${field.id}-options`} className="text-xs text-slate-400">Options (comma-separated)</label>
+            <Input
+              id={`${field.id}-options`}
               value={field.options?.join(', ') || ''} 
               onChange={(e) => onUpdate(field.id, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
               placeholder="Option 1, Option 2, Option 3"

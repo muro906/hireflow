@@ -57,29 +57,30 @@ export function DynamicForm({ schema, onSubmit, isLoading }: DynamicFormProps) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-200 mb-1">Full Name <span className="text-rose-500">*</span></label>
-          <Input {...register('full_name')} placeholder="Jane Doe" />
+          <label htmlFor="full_name" className="block text-sm font-medium text-slate-200 mb-1">Full Name <span className="text-rose-500">*</span></label>
+          <Input id="full_name" {...register('full_name')} placeholder="Jane Doe" />
           {errors.full_name && <p className="mt-1 text-sm text-rose-500">{errors.full_name.message as string}</p>}
         </div>
         
         <div>
-          <label className="block text-sm font-medium text-slate-200 mb-1">Email <span className="text-rose-500">*</span></label>
-          <Input type="email" {...register('email')} placeholder="jane@example.com" />
+          <label htmlFor="email" className="block text-sm font-medium text-slate-200 mb-1">Email <span className="text-rose-500">*</span></label>
+          <Input id="email" type="email" {...register('email')} placeholder="jane@example.com" />
           {errors.email && <p className="mt-1 text-sm text-rose-500">{errors.email.message as string}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-200 mb-1">Phone Number</label>
-          <Input type="tel" {...register('phone')} placeholder="+1 (555) 000-0000" />
+          <label htmlFor="phone" className="block text-sm font-medium text-slate-200 mb-1">Phone Number</label>
+          <Input id="phone" type="tel" {...register('phone')} placeholder="+1 (555) 000-0000" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-200 mb-1">Resume / CV <span className="text-rose-500">*</span></label>
+          <label htmlFor="cv" className="block text-sm font-medium text-slate-200 mb-1">Resume / CV <span className="text-rose-500">*</span></label>
           <Controller
             control={control}
             name="cv"
             render={({ field: { onChange, onBlur, name, ref } }) => (
               <Input
+                id="cv"
                 type="file"
                 accept=".pdf,.doc,.docx"
                 onChange={(e) => {
@@ -99,21 +100,23 @@ export function DynamicForm({ schema, onSubmit, isLoading }: DynamicFormProps) {
         {/* Dynamic Fields */}
         {schema.fields.map((field) => (
           <div key={field.id}>
-            <label className="block text-sm font-medium text-slate-200 mb-1">
+            <label htmlFor={field.id} className="block text-sm font-medium text-slate-200 mb-1">
               {field.label} {field.required && <span className="text-rose-500">*</span>}
             </label>
             
             {field.type === 'textarea' ? (
-              <Textarea {...register(field.id)} />
+              <Textarea id={field.id} {...register(field.id)} />
             ) : field.type === 'select' ? (
-              <Select 
-                {...register(field.id)} 
-                options={field.options?.map(o => ({ label: o, value: o })) || []} 
+              <Select
+                id={field.id}
+                {...register(field.id)}
+                options={field.options?.map(o => ({ label: o, value: o })) || []}
               />
             ) : (
-              <Input 
-                type={field.type === 'number' ? 'text' : field.type} 
-                {...register(field.id)} 
+              <Input
+                id={field.id}
+                type={field.type === 'number' ? 'text' : field.type}
+                {...register(field.id)}
               />
             )}
             

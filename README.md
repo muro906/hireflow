@@ -193,8 +193,14 @@ Key variables:
 ## 🧪 Development
 
 ```bash
-# Run backend tests
+# Run backend tests (unit + integration)
 make test
+
+# Unit tests only — no database required
+make test-short
+
+# Run frontend tests (vitest)
+make test-fe
 
 # Run frontend type-check + lint
 make typecheck lint-fe
@@ -208,6 +214,25 @@ make psql
 # Tail logs
 make logs
 ```
+
+### Tests
+
+Backend tests are split by whether they need infrastructure:
+
+- **Unit tests** run anywhere (`make test-short`).
+- **Integration tests** need a migrated PostgreSQL database and read
+  `TEST_DATABASE_URL`, falling back to `DATABASE_URL`. They **skip** rather than
+  fail when neither is set, so `make test-short` stays green on a bare checkout.
+  Each test builds its own company fixture and deletes it afterwards.
+
+```bash
+# Integration tests against the docker-compose database
+make dev-bg && make migrate
+TEST_DATABASE_URL="postgres://hireflow:hireflow_secret@localhost:5433/hireflow?sslmode=disable" make test
+```
+
+Frontend tests use **vitest** + **Testing Library** in a jsdom environment
+(`npm run test`, or `npm run test:watch` while developing).
 
 ### Creating a migration
 

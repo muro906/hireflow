@@ -43,6 +43,16 @@ var cvContentTypes = map[string]bool{
 
 var cvExtensions = map[string]bool{".pdf": true, ".doc": true, ".docx": true}
 
+// isAllowedCV reports whether an attachment looks like a CV document. Browsers
+// disagree on the content type for .doc/.docx, so a recognised extension is
+// accepted even when the declared type is not one we know.
+func isAllowedCV(contentType, filename string) bool {
+	if cvContentTypes[contentType] {
+		return true
+	}
+	return cvExtensions[strings.ToLower(filepath.Ext(filename))]
+}
+
 // Apply accepts either a JSON body or, when the candidate attaches a CV, a
 // multipart/form-data body carrying the same fields plus a "cv" file part.
 func (h *ApplicationHandler) Apply(c *gin.Context) {
@@ -102,8 +112,7 @@ func (h *ApplicationHandler) attachCV(c *gin.Context, appID uuid.UUID) error {
 	defer file.Close()
 
 	contentType := header.Header.Get("Content-Type")
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !cvContentTypes[contentType] && !cvExtensions[ext] {
+	if !isAllowedCV(contentType, header.Filename) {
 		return errUnsupportedCV
 	}
 
