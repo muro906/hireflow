@@ -3,8 +3,8 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"github.com/hireflow/hireflow/backend/internal/config"
+	"github.com/redis/go-redis/v9"
 )
 
 func New(cfg *config.Config) (*redis.Client, error) {

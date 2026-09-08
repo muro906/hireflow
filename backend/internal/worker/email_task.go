@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/hireflow/hireflow/backend/internal/email"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type EmailTaskHandler struct {
@@ -33,7 +33,7 @@ func (h *EmailTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		JOIN pipeline_stages ps ON a.stage_id = ps.id
 		WHERE a.id = $1 AND ps.id = $2
 	`
-	
+
 	var data email.StageChangeData
 	err := h.db.QueryRow(ctx, query, p.ApplicationID, p.ToStageID).Scan(
 		&data.CandidateName,

@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	originsMap := make(map[string]bool)
 	for _, o := range allowedOrigins {

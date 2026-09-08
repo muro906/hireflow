@@ -29,12 +29,12 @@ func main() {
 	defer rdb.Close()
 
 	authSvc := services.NewAuthService(pool, rdb, cfg)
-	
+
 	ctx := context.Background()
 	user, _, _, err := authSvc.Register(ctx, "Acme Corp", "admin@acme.com", "password123", "Admin User")
 	if err != nil {
 		log.Fatalf("seed error: %v", err)
 	}
-	
+
 	log.Printf("Successfully seeded demo data: %v", user)
 }
